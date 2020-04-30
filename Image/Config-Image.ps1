@@ -219,10 +219,10 @@ $arguments = "/i $installer /l`*v C:\windows\logs\teamsinstall.log ALLUSER=1 ALL
 Start-Download -source $download -destination $extractFile -Verbose
 ## set registry to allow machine wide install
 Set-Registry -keyPath "HKLM:SOFTWARE\Microsoft\Teams" -regName IsWVDEnvironment -regValue 1 -propertyType DWord
-## remove from run command to stop teams auto-starting
-Remove-ItemProperty -Path HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run -Name Teams -Force
 ## start install
 Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
+## remove from run command to stop teams auto-starting
+Remove-ItemProperty -Path HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run -Name Teams -Force
 
 
 ## edge
@@ -249,5 +249,6 @@ Start-DownloadCtxOptimiser -download $download -extractPath $extractPath
 ## start optimisation script
 Set-ExecutionPolicy Bypass -Scope Process -Force
 & $ctxscript -Mode Execute -OutputXml 'C:\windows\logs\CitrixOptimizerRollback.xml'
+
 
 Stop-Transcript

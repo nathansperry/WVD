@@ -80,12 +80,15 @@ function Start-Download {
 
         Try {
             
-            Start-BitsTransfer -Source $source -Destination $destination -ErrorAction Stop | Out-Null
+            (New-Object System.Net.WebClient).DownloadFile($source, $destination)
+            #Start-BitsTransfer -Source $source -Destination $destination -ErrorAction Stop | Out-Null
         
         }
         Catch {
-    
-            Write-Error -Message ("There was a problem downloading the file $source")      
+            
+            Write-Error $Error[0]
+            #Write-Error -Message ("There was a problem downloading the file $source") 
+            Stop-Transcript     
             exit
     
         }
@@ -111,18 +114,21 @@ function Extract-File {
 
     Remove-Item -Path $filePath -Force
  
- }
+}
 
+Start-Transcript -Path  "$env:windir\Logs\Config-Image.log" -Force | Out-Null
+
+## path to extract all files
+$extractPath = "D:\"
 
 ## configurations file
 $download = "https://github.com/nathansperry/WVD/archive/master.zip"
 $name = ($download -split '/')[-1]
-$extractPath = "D:\"
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 $ukregionXML = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\UKRegion.xml")
 
 ## download configuration files
-Start-Download -source $download -destination $extractPath -Verbose
+Start-Download -source $download -destination $extractFile -Verbose
 Extract-File -filePath $extractFile -extractedPath $extractPath
 
 ## Set Locale, language etc. 
@@ -135,26 +141,26 @@ Set-Culture en-GB
 ## fslogix
 $download = "https://aka.ms/fslogix_download"
 $name = "fslogix.zip"
-$extractPath = "D:\"
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 $installer = "$extractPath" + "FSLogix\x64\Release\FSLogixAppsSetup.exe"
 $arguments = "/install /quiet /norestart"
 
 ## download and install FSLogix
-Start-Download -source $download -destination (Join-Path -path $extractPath -ChildPath $name) -Verbose
+Start-Download -source $download -destination $extractFile -Verbose
 Extract-File -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath 'Fslogix')
 Start-Install -FilePath $installer -Arguments $arguments
 
 ## teams
-$download = "https://teams.microsoft.com/downloads/desktopurl?env=production&plat=windows&download=true&managedInstaller=true&arch=x64"
-$name = "teams.msi"
-$extractPath = "D:\"
+#$download = "https://teams.microsoft.com/downloads/desktopurl?env=production&plat=windows&download=true&managedInstaller=true&arch=x64"
+$download = "https://statics.teams.cdn.office.net/production-windows-x64/1.3.00.4461/Teams_windows_x64.msi"
+#$name = "teams.msi"
+$name = ($download -split '/')[-1]
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 $installer = "$extractPath" + "$name"
 $arguments = "/i $installer /l`*v C:\windows\logs\teamsinstall.log ALLUSER=1 /quiet"
 
 ## download and install Teams
-Start-Download -source $download -destination (Join-Path -path $extractPath -ChildPath $name) -Verbose
+Start-Download -source $download -destination $extractFile -Verbose
 ## set registry to allow machine wide install
 Set-Registry -keyPath "HKLM:SOFTWARE\Microsoft\Teams" -regName IsWVDEnvironment -regValue 1 -propertyType DWord
 ## set registry to stop prompt when launching from browser
@@ -162,3 +168,4 @@ New-ItemProperty -Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\
 ## start install
 Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
 
+Stop-Transcript

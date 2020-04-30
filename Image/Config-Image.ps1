@@ -170,6 +170,10 @@ function Start-ExtractFile {
 
 Start-Transcript -Path  "$env:windir\Logs\Config-Image.log" -Force | Out-Null
 
+## install evergreen module
+if (!(Test-Path -Path "C:\Program Files\PackageManagement\ProviderAssemblies\nuget")) {Find-PackageProvider -Name 'Nuget' -ForceBootstrap -IncludeDependencies}
+if (!(Get-Module -ListAvailable -Name Evergreen)) {Install-Module Evergreen -Scope AllUsers -Force | Import-Module Evergreen -Force}
+
 ## path to extract all files
 $extractPath = "D:\"
 
@@ -215,14 +219,16 @@ $arguments = "/i $installer /l`*v C:\windows\logs\teamsinstall.log ALLUSER=1 ALL
 Start-Download -source $download -destination $extractFile -Verbose
 ## set registry to allow machine wide install
 Set-Registry -keyPath "HKLM:SOFTWARE\Microsoft\Teams" -regName IsWVDEnvironment -regValue 1 -propertyType DWord
-## start install
-Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
 ## remove from run command to stop teams auto-starting
 Remove-ItemProperty -Path HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run -Name Teams -Force
+## start install
+Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
 
 
 ## edge
-$download = "http://dl.delivery.mp.microsoft.com/filestreamingservice/files/b66ab30d-0d70-4efe-8764-b5ae8a661e1b/MicrosoftEdgeEnterpriseX64.msi"
+$edge = Get-MicrosoftEdge | Where-Object {($_.Platform -eq "Windows") -and ($_.Product -eq "Stable") -and ($_.Architecture -eq "x64")} | Select-Object -last 1
+$download = $edge.uri
+#$download = "http://dl.delivery.mp.microsoft.com/filestreamingservice/files/b66ab30d-0d70-4efe-8764-b5ae8a661e1b/MicrosoftEdgeEnterpriseX64.msi"
 $name = ($download -split '/')[-1]
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 $installer = "$extractPath" + "$name"
@@ -240,9 +246,8 @@ $ctxscript = "$extractPath" + "CitrixOptimizer\CtxOptimizerEngine.ps1"
 $arguments = "/i $installer /l`*v C:\windows\logs\edgeinstall.log ALLUSERS=1 DONOTCREATEDESKTOPSHORTCUT=true /norestart /quiet"
 Start-DownloadCtxOptimiser -download $download -extractPath $extractPath
 
-## start script
+## start optimisation script
 Set-ExecutionPolicy Bypass -Scope Process -Force
 & $ctxscript -Mode Execute -OutputXml 'C:\windows\logs\CitrixOptimizerRollback.xml'
-
 
 Stop-Transcript

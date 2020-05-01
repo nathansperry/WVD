@@ -281,7 +281,7 @@ $installer = "$extractPath" + "$name"
 $arguments = "/i $installer /l`*v C:\windows\logs\edgeinstall.log ALLUSERS=1 DONOTCREATEDESKTOPSHORTCUT=true /norestart /quiet"
 
 ## download and install edge
-Start-Download -source $download -destination $extractFile -Verbose
+Start-Download -source $download -destination $extractFile
 Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
 Write-Verbose -Message ("MSEdge install completed.") -Verbose
 

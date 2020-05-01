@@ -1,3 +1,44 @@
+<#
+    .SYNOPSIS
+    This script is used to configure the virtual desktop image
+
+    .DESCRIPTION
+    This script is used to configure the virtual desktop image
+
+    .LINK
+    http://virtualengine.co.uk
+
+    NAME: N/A
+    AUTHOR: Nathan Sperry, Virtual Engine
+    LASTEDIT: 01/05/2020
+    VERSION : 1.0
+    WEBSITE: http://www.virtualengine.co.uk
+
+#>
+
+function Update-DefaultUserProfile {
+
+    [CmdletBinding()]
+    param (
+
+
+    )
+
+    ## load registry hive
+    Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Load HKLM\\DUTemp C:\\Users\\Default\\NTUSER.DAT" -Wait
+    Write-Verbose ("Loaded NTUSER.DAT registry hive") -Verbose
+
+    ## Setting the View > Item Check Box to off
+    Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Add HKLM\\DUTemp\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced /v AutoCheckSelect /t REG_DWORD /d 0" -Wait
+    Write-Verbose ("Processed default user changes") -Verbose
+
+    ## unload registry hive
+    Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Unload HKLM\\DUTemp" -Wait
+    Write-Verbose ("Unloaded NTUSER.DAT registry hive") -Verbose
+
+
+}
+
 function Start-DownloadCtxOptimiser {
 
     [CmdletBinding()]
@@ -27,7 +68,7 @@ function Start-DownloadCtxOptimiser {
     $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 
     #Initialize Session 
-    Invoke-WebRequest "https://identity.citrix.com/Utility/STS/Sign-In" -SessionVariable websession -UseBasicParsing
+    Invoke-WebRequest "https://identity.citrix.com/Utility/STS/Sign-In" -SessionVariable websession -UseBasicParsing | Out-Null
 
     #Set Form
     $form = @{
@@ -39,10 +80,11 @@ function Start-DownloadCtxOptimiser {
         "errorURL" = 'https://www.citrix.com/login?url=https%3A%2F%2Fsupport.citrix.com%2Farticle%2FCTX224676%3Fdownload&err=y'
     }
     #Authenticate
-    Invoke-WebRequest -Uri ("https://identity.citrix.com/Utility/STS/Sign-In") -WebSession $websession -Method POST -Body $form -ContentType "application/x-www-form-urlencoded" -UseBasicParsing
+    Invoke-WebRequest -Uri ("https://identity.citrix.com/Utility/STS/Sign-In") -WebSession $websession -Method POST -Body $form -ContentType "application/x-www-form-urlencoded" -UseBasicParsing | Out-Null
 
     #Download File
     Invoke-WebRequest -WebSession $websession -Uri $download -OutFile $extractFile -Verbose -UseBasicParsing
+    
 
     #extract file
     Start-ExtractFile -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath 'CitrixOptimizer')
@@ -97,7 +139,7 @@ function Start-Install {
 
     process {
 
-        Write-Verbose ('Running "{0} {1}".' -f $FilePath, $Arguments);
+        Write-Verbose ('Running "{0} {1}".' -f $FilePath, $Arguments) -Verbose;
 
         if ($Arguments) { $process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -PassThru; }
         else { $process = Start-Process -FilePath $FilePath -PassThru; }
@@ -105,10 +147,7 @@ function Start-Install {
         ## Bug whereby the exit code doesn't get returned if handle not referenced
         $process.Handle | out-null
 
-        #Write-Verbose ('Process "{0}" launched.' -f $process.Id);
-        #Write-Verbose ('Waiting for process "{0}" to exit...' -f $process.Id);
         Wait-Process -Id $process.Id;
-        #Write-Verbose ('Process "{0}" exited with code "{1}".' -f $process.Id, $process.ExitCode);
         
         ## Return the exit code..
         #Return $process.ExitCode;
@@ -132,6 +171,7 @@ function Start-Download {
         Try {
             
             (New-Object System.Net.WebClient).DownloadFile($source, $destination)
+            Write-Verbose ("Downloaded '{0}' to '{1}." -f $source, $destination) -Verbose
             #Start-BitsTransfer -Source $source -Destination $destination -ErrorAction Stop | Out-Null
         
         }
@@ -160,10 +200,11 @@ function Start-ExtractFile {
     )
 
     Add-Type -assembly "system.io.compression.filesystem"
-    Write-Verbose -Message ("Extacting ''{0}'' to ''{1}'' ." -f $filePath,$extractedPath)
+    Write-Verbose -Message ("Extacting ''{0}'' to ''{1}''." -f $filePath,$extractedPath) -Verbose
     [io.compression.zipfile]::ExtractToDirectory($filePath, $extractedPath)
 
     Remove-Item -Path $filePath -Force
+    Write-Verbose -Message ("Deleting ''{0}''." -f $filePath) -Verbose
  
 }
 
@@ -193,10 +234,14 @@ Start-ExtractFile -filePath $extractFile -extractedPath $extractPath
 & tzutil /s "GMT Standard Time"
 # Set languages/culture
 Set-Culture en-GB
+Write-Verbose -Message ("Regional settings applied.") -Verbose
 
 ## fslogix
-$download = "https://aka.ms/fslogix_download"
-$name = "fslogix.zip"
+$fsl = Get-MicrosoftFSLogixApps | Select-Object -last 1
+$download = $fsl.uri
+$name = ($download -split '/')[-1]
+#$download = "https://aka.ms/fslogix_download"
+#$name = "fslogix.zip"
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 $installer = "$extractPath" + "FSLogix\x64\Release\FSLogixAppsSetup.exe"
 $arguments = "/install /quiet /norestart"
@@ -205,10 +250,12 @@ $arguments = "/install /quiet /norestart"
 Start-Download -source $download -destination $extractFile -Verbose
 Start-ExtractFile -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath 'Fslogix')
 Start-Install -FilePath $installer -Arguments $arguments
+Write-Verbose -Message ("FSLogix install completed.") -Verbose
 
 ## teams
-#$download = "https://teams.microsoft.com/downloads/desktopurl?env=production&plat=windows&download=true&managedInstaller=true&arch=x64"
-$download = "https://statics.teams.cdn.office.net/production-windows-x64/1.3.00.4461/Teams_windows_x64.msi"
+$teams = Get-MicrosoftTeams | Where-Object {$_.Architecture -eq "x64"} | Select-Object -last 1
+$download = $teams.uri
+#$download = "https://statics.teams.cdn.office.net/production-windows-x64/1.3.00.4461/Teams_windows_x64.msi"
 #$name = "teams.msi"
 $name = ($download -split '/')[-1]
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
@@ -223,12 +270,11 @@ Set-Registry -keyPath "HKLM:SOFTWARE\Microsoft\Teams" -regName IsWVDEnvironment 
 Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
 ## remove from run command to stop teams auto-starting
 Remove-ItemProperty -Path HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run -Name Teams -Force
-
+Write-Verbose -Message ("Teams install completed.") -Verbose
 
 ## edge
 $edge = Get-MicrosoftEdge | Where-Object {($_.Platform -eq "Windows") -and ($_.Product -eq "Stable") -and ($_.Architecture -eq "x64")} | Select-Object -last 1
 $download = $edge.uri
-#$download = "http://dl.delivery.mp.microsoft.com/filestreamingservice/files/b66ab30d-0d70-4efe-8764-b5ae8a661e1b/MicrosoftEdgeEnterpriseX64.msi"
 $name = ($download -split '/')[-1]
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 $installer = "$extractPath" + "$name"
@@ -237,18 +283,23 @@ $arguments = "/i $installer /l`*v C:\windows\logs\edgeinstall.log ALLUSERS=1 DON
 ## download and install edge
 Start-Download -source $download -destination $extractFile -Verbose
 Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
+Write-Verbose -Message ("MSEdge install completed.") -Verbose
 
-## download and install citrix optmiser
+## update default user profile
+Update-DefaultUserProfile
+
+## citrix optmiser
 $download = "https://phoenix.citrix.com/supportkc/filedownload?uri=/filedownload/CTX224676/CitrixOptimizer.zip"
 $name = ($download -split '/')[-1]
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)
 $ctxscript = "$extractPath" + "CitrixOptimizer\CtxOptimizerEngine.ps1"
-$arguments = "/i $installer /l`*v C:\windows\logs\edgeinstall.log ALLUSERS=1 DONOTCREATEDESKTOPSHORTCUT=true /norestart /quiet"
+
+## download and install citrix optmiser
 Start-DownloadCtxOptimiser -download $download -extractPath $extractPath
 
 ## start optimisation script
 Set-ExecutionPolicy Bypass -Scope Process -Force
 & $ctxscript -Mode Execute -OutputXml 'C:\windows\logs\CitrixOptimizerRollback.xml'
-
+Write-Verbose -Message ("Optimisations completed.") -Verbose
 
 Stop-Transcript

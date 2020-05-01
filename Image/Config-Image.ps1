@@ -16,6 +16,54 @@
 
 #>
 
+<#
+    .SYNOPSIS
+        Returns only the latest Microsoft Edge Enterprise release for each platform
+#>
+function Get-MicrosoftEdgeEx
+{
+    [CmdletBinding()]
+    param ( )
+    process
+    {
+        $edgeVersions = Invoke-RestMethod -Uri 'https://edgeupdates.microsoft.com/api/products?view=enterprise'
+
+        foreach ($channel in 'Stable','Beta','Dev')
+        {
+            $releases = $edgeVersions | Where-Object { $_.Product -eq $channel } | Select-Object -ExpandProperty Releases
+            $platforms = $releases | Select-Object -ExpandProperty Platform -Unique
+            $architectures = $releases | Select-Object -ExpandProperty Architecture -Unique
+            foreach ($platform in $platforms)
+            {
+                foreach ($architecture in $architectures)
+                {
+                    $latestVersion = @{ VersionString = '00.00'; Version = ('00.00' -as [System.Version]) }
+                    $releases |
+                        Where-Object { $_.Platform -eq $platform -and $_.Architecture -eq $architecture } |
+                            ForEach-Object {
+                                if (($_.ProductVersion -as [System.Version]) -gt $latestVersion.Version)
+                                {
+                                    $latestVersion = @{ VersionString = $_.ProductVersion; Version = ($_.ProductVersion -as [System.Version]) }
+                                }
+                            }
+                    $releases |
+                        Where-Object { $_.ProductVersion -eq $latestVersion.VersionString -and  $_.Platform -eq $platform -and $_.Architecture -eq $architecture } |
+                            ForEach-Object {
+                                [PSCustomObject] @{
+                                    Version      = $_.ProductVersion
+                                    Channel      = $channel
+                                    Platform     = $_.Platform
+                                    Architecture = $_.Architecture
+                                    Uri          = $_.Artifacts.Location
+                                }
+                            }
+                }
+            }
+        }
+    }
+}
+
+
 function Update-DefaultUserProfile {
 
     [CmdletBinding()]
@@ -273,7 +321,7 @@ Remove-ItemProperty -Path HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVe
 Write-Verbose -Message ("Teams install completed.") -Verbose
 
 ## edge
-$edge = Get-MicrosoftEdge | Where-Object {($_.Platform -eq "Windows") -and ($_.Product -eq "Stable") -and ($_.Architecture -eq "x64")} | Select-Object -last 1
+$edge = Get-MicrosoftEdgeEx | Where-Object {($_.Platform -eq "Windows") -and ($_.Channel -eq "Stable") -and ($_.Architecture -eq "x64")} | Select-Object -last 1
 $download = $edge.uri
 $name = ($download -split '/')[-1]
 $extractFile = (Join-Path -path $extractPath -ChildPath $name)

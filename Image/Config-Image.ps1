@@ -68,9 +68,34 @@ function Update-DefaultUserProfile {
 
     [CmdletBinding()]
     param (
-
+        [Parameter(Mandatory)]
+        [System.String] $settingsPath
 
     )
+
+    If (Test-Path $settingsPath)
+    {
+        $DefaultUserSettings = Get-Content $settingsPath
+    }
+    If ($DefaultUserSettings.count -gt 0)
+    {
+        ## load registry hive
+        Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Load HKLM\\DUTemp C:\\Users\\Default\\NTUSER.DAT" -Wait
+        Write-Verbose ("Loaded NTUSER.DAT registry hive") -Verbose
+
+        Foreach ($Item in $DefaultUserSettings)
+        {
+            Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "$Item" -Wait
+            Write-Verbose ("Processed $Item") -Verbose
+        }
+
+        ## unload registry hive
+        Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Unload HKLM\\DUTemp" -Wait
+        Write-Verbose ("Unloaded NTUSER.DAT registry hive") -Verbose
+
+    }
+
+    <#
 
     ## load registry hive
     Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Load HKLM\\DUTemp C:\\Users\\Default\\NTUSER.DAT" -Wait
@@ -83,7 +108,7 @@ function Update-DefaultUserProfile {
     ## unload registry hive
     Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Unload HKLM\\DUTemp" -Wait
     Write-Verbose ("Unloaded NTUSER.DAT registry hive") -Verbose
-
+    #>
 
 }
 
@@ -263,6 +288,9 @@ Start-Transcript -Path  "$env:windir\Logs\Config-Image.log" -Force | Out-Null
 if (!(Test-Path -Path "C:\Program Files\PackageManagement\ProviderAssemblies\nuget")) {Find-PackageProvider -Name 'Nuget' -ForceBootstrap -IncludeDependencies}
 if (!(Get-Module -ListAvailable -Name Evergreen)) {Install-Module Evergreen -Scope AllUsers -Force | Import-Module Evergreen -Force}
 
+## windows version
+$version = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name ReleaseID -ErrorAction Stop).ReleaseID
+
 ## path to extract all files
 $extractPath = "D:\"
 
@@ -334,7 +362,8 @@ Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
 Write-Verbose -Message ("MSEdge install completed.") -Verbose
 
 ## update default user profile
-Update-DefaultUserProfile
+$settingsPath = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\$($version)_defaultuser.txt")
+Update-DefaultUserProfile -settingsPath $settingsPath
 
 ## citrix optmiser
 $download = "https://phoenix.citrix.com/supportkc/filedownload?uri=/filedownload/CTX224676/CitrixOptimizer.zip"

@@ -286,7 +286,7 @@ Start-Transcript -Path  "$env:windir\Logs\Config-Image.log" -Force | Out-Null
 
 ## install evergreen module
 if (!(Test-Path -Path "C:\Program Files\PackageManagement\ProviderAssemblies\nuget")) {Find-PackageProvider -Name 'Nuget' -ForceBootstrap -IncludeDependencies}
-if (!(Get-Module -ListAvailable -Name Evergreen)) {Install-Module Evergreen -Scope AllUsers -Force | Import-Module Evergreen -Force}
+if (!(Get-Module -ListAvailable -Name Evergreen)) {Install-Module Evergreen -Scope AllUsers -Force -RequiredVersion 2004.161 | Import-Module Evergreen -Force}
 
 ## windows version
 $version = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name ReleaseID -ErrorAction Stop).ReleaseID

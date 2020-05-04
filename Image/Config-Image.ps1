@@ -366,13 +366,15 @@ $settingsPath = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\$($ve
 Update-DefaultUserProfile -settingsPath $settingsPath
 
 ## citrix optmiser
-$download = "https://phoenix.citrix.com/supportkc/filedownload?uri=/filedownload/CTX224676/CitrixOptimizer.zip"
-$name = ($download -split '/')[-1]
-$extractFile = (Join-Path -path $extractPath -ChildPath $name)
-$ctxscript = "$extractPath" + "CitrixOptimizer\CtxOptimizerEngine.ps1"
+#$download = "https://phoenix.citrix.com/supportkc/filedownload?uri=/filedownload/CTX224676/CitrixOptimizer.zip"
+$name = "Optimiser.zip"
+$extractFile = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\$($name)")
+#$ctxscript = "$extractPath" + "CitrixOptimizer\CtxOptimizerEngine.ps1"
+$ctxscript = "$extractPath" + "Optimiser\CtxOptimizerEngine.ps1"
 
 ## download and install citrix optmiser
-Start-DownloadCtxOptimiser -download $download -extractPath $extractPath
+Start-ExtractFile -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath "Optimiser")
+#Start-DownloadCtxOptimiser -download $download -extractPath $extractPath
 
 ## start optimisation script
 Set-ExecutionPolicy Bypass -Scope Process -Force

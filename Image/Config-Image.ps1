@@ -20,6 +20,32 @@
     .SYNOPSIS
         Returns only the latest Microsoft Edge Enterprise release for each platform
 #>
+function Start-VcRedistInstall {
+
+    [CmdletBinding()]
+    param (
+
+        [Parameter(Mandatory)]
+        [System.String] $extractPath
+
+    )
+
+    $extractedPath = (Join-Path -path $extractPath -ChildPath 'VC')
+
+    ## Create temp download folder
+    New-Item -Path $extractedPath -ItemType Directory
+    Write-Verbose ("Creating folder $extractedPath") -Verbose
+
+    ## Get latest VcRedists and download them
+    Get-VcList | Save-VcRedist -Path $extractedPath
+    Write-Verbose ("Saving VcRedist installers to $extractedPath") -Verbose
+
+    ## Install VcRedists
+    Install-VcRedist -Path $extractedPath -VcList (Get-VcList)
+    Write-Verbose ("Installed lastest VcRedist") -Verbose    
+
+}
+
 function Get-MicrosoftEdgeEx
 {
     [CmdletBinding()]
@@ -80,7 +106,7 @@ function Update-DefaultUserProfile {
     If ($DefaultUserSettings.count -gt 0)
     {
         ## load registry hive
-        Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Load HKLM\\DUTemp C:\\Users\\Default\\NTUSER.DAT" -Wait
+        Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Load HKLM\DUTemp C:\\Users\\Default\\NTUSER.DAT" -Wait
         Write-Verbose ("Loaded NTUSER.DAT registry hive") -Verbose
 
         Foreach ($Item in $DefaultUserSettings)
@@ -90,7 +116,7 @@ function Update-DefaultUserProfile {
         }
 
         ## unload registry hive
-        Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Unload HKLM\\DUTemp" -Wait
+        Start-Process C:\\Windows\\System32\\Reg.exe -ArgumentList "Unload HKLM\DUTemp" -Wait
         Write-Verbose ("Unloaded NTUSER.DAT registry hive") -Verbose
 
     }
@@ -284,9 +310,12 @@ function Start-ExtractFile {
 
 Start-Transcript -Path  "$env:windir\Logs\Config-Image.log" -Force | Out-Null
 
-## install evergreen module
+
 if (!(Test-Path -Path "C:\Program Files\PackageManagement\ProviderAssemblies\nuget")) {Find-PackageProvider -Name 'Nuget' -ForceBootstrap -IncludeDependencies}
+## install evergreen module
 if (!(Get-Module -ListAvailable -Name Evergreen)) {Install-Module Evergreen -Scope AllUsers -Force -RequiredVersion 2004.161 | Import-Module Evergreen -Force}
+## install VcRedist module
+if (!(Get-Module -ListAvailable -Name VcRedist)) {Install-Module VcRedist -Scope AllUsers -Force -Confirm:$false| Import-Module VcRedist -Force}
 
 ## windows version
 $version = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name ReleaseID -ErrorAction Stop).ReleaseID
@@ -294,91 +323,103 @@ $version = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion
 ## path to extract all files
 $extractPath = "D:\"
 
-## configurations file
-$download = "https://github.com/nathansperry/WVD/archive/master.zip"
-$name = ($download -split '/')[-1]
-$extractFile = (Join-Path -path $extractPath -ChildPath $name)
-$ukregionXML = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\UKRegion.xml")
+## Begin Region (configurations file)
+    $download = "https://github.com/nathansperry/WVD/archive/master.zip"
+    $name = ($download -split '/')[-1]
+    $extractFile = (Join-Path -path $extractPath -ChildPath $name)
+    $ukregionXML = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\UKRegion.xml")
 
-## download configuration files
-Start-Download -source $download -destination $extractFile -Verbose
-Start-ExtractFile -filePath $extractFile -extractedPath $extractPath
+    ## download configuration files
+    Start-Download -source $download -destination $extractFile -Verbose
+    Start-ExtractFile -filePath $extractFile -extractedPath $extractPath
 
-## Set Locale, language etc. 
-& $env:SystemRoot\System32\control.exe "intl.cpl,,/f:"""$ukregionXML""""
-# Set Timezone
-& tzutil /s "GMT Standard Time"
-# Set languages/culture
-Set-Culture en-GB
-Write-Verbose -Message ("Regional settings applied.") -Verbose
+    ## Set Locale, language etc. 
+    & $env:SystemRoot\System32\control.exe "intl.cpl,,/f:"""$ukregionXML""""
+    # Set Timezone
+    & tzutil /s "GMT Standard Time"
+    # Set languages/culture
+    Set-Culture en-GB
+    Write-Verbose -Message ("Regional settings applied.") -Verbose
+## End Region
 
-## fslogix
-$fsl = Get-MicrosoftFSLogixApps | Select-Object -last 1
-$download = $fsl.uri
-$name = ($download -split '/')[-1]
-#$download = "https://aka.ms/fslogix_download"
-#$name = "fslogix.zip"
-$extractFile = (Join-Path -path $extractPath -ChildPath $name)
-$installer = "$extractPath" + "FSLogix\x64\Release\FSLogixAppsSetup.exe"
-$arguments = "/install /quiet /norestart"
+## Begin Region (FSLogix)
+    $fsl = Get-MicrosoftFSLogixApps | Select-Object -last 1
+    $download = $fsl.uri
+    $name = ($download -split '/')[-1]
+    #$download = "https://aka.ms/fslogix_download"
+    #$name = "fslogix.zip"
+    $extractFile = (Join-Path -path $extractPath -ChildPath $name)
+    $installer = "$extractPath" + "FSLogix\x64\Release\FSLogixAppsSetup.exe"
+    $arguments = "/install /quiet /norestart"
 
-## download and install FSLogix
-Start-Download -source $download -destination $extractFile -Verbose
-Start-ExtractFile -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath 'Fslogix')
-Start-Install -FilePath $installer -Arguments $arguments
-Write-Verbose -Message ("FSLogix install completed.") -Verbose
+    ## download and install FSLogix
+    Start-Download -source $download -destination $extractFile -Verbose
+    Start-ExtractFile -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath 'Fslogix')
+    Start-Install -FilePath $installer -Arguments $arguments
+    Write-Verbose -Message ("FSLogix install completed.") -Verbose
+## End Region
 
-## teams
-$teams = Get-MicrosoftTeams | Where-Object {$_.Architecture -eq "x64"} | Select-Object -last 1
-$download = $teams.uri
-#$download = "https://statics.teams.cdn.office.net/production-windows-x64/1.3.00.4461/Teams_windows_x64.msi"
-#$name = "teams.msi"
-$name = ($download -split '/')[-1]
-$extractFile = (Join-Path -path $extractPath -ChildPath $name)
-$installer = "$extractPath" + "$name"
-$arguments = "/i $installer /l`*v C:\windows\logs\teamsinstall.log ALLUSER=1 ALLUSERS=1 /quiet"
+## Begin Region (Teams)
+    $teams = Get-MicrosoftTeams | Where-Object {$_.Architecture -eq "x64"} | Select-Object -last 1
+    $download = $teams.uri
+    #$download = "https://statics.teams.cdn.office.net/production-windows-x64/1.3.00.4461/Teams_windows_x64.msi"
+    #$name = "teams.msi"
+    $name = ($download -split '/')[-1]
+    $extractFile = (Join-Path -path $extractPath -ChildPath $name)
+    $installer = "$extractPath" + "$name"
+    $arguments = "/i $installer /l`*v C:\windows\logs\teamsinstall.log ALLUSER=1 ALLUSERS=1 /quiet"
 
-## download and install Teams
-Start-Download -source $download -destination $extractFile -Verbose
-## set registry to allow machine wide install
-Set-Registry -keyPath "HKLM:SOFTWARE\Microsoft\Teams" -regName IsWVDEnvironment -regValue 1 -propertyType DWord
-## start install
-Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
-## remove from run command to stop teams auto-starting
-Remove-ItemProperty -Path HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run -Name Teams -Force
-Write-Verbose -Message ("Teams install completed.") -Verbose
+    ## download and install Teams
+    Start-Download -source $download -destination $extractFile -Verbose
+    ## set registry to allow machine wide install
+    Set-Registry -keyPath "HKLM:SOFTWARE\Microsoft\Teams" -regName IsWVDEnvironment -regValue 1 -propertyType DWord
+    ## start install
+    Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
+    ## remove from run command to stop teams auto-starting
+    Remove-ItemProperty -Path HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run -Name Teams -Force
+    Write-Verbose -Message ("Teams install completed.") -Verbose
+## End Region
 
-## edge
-$edge = Get-MicrosoftEdgeEx | Where-Object {($_.Platform -eq "Windows") -and ($_.Channel -eq "Stable") -and ($_.Architecture -eq "x64")} | Select-Object -last 1
-$download = $edge.uri
-$name = ($download -split '/')[-1]
-$extractFile = (Join-Path -path $extractPath -ChildPath $name)
-$installer = "$extractPath" + "$name"
-$arguments = "/i $installer /l`*v C:\windows\logs\edgeinstall.log ALLUSERS=1 DONOTCREATEDESKTOPSHORTCUT=true /norestart /quiet"
+## Begin Region (Edge)
+    $edge = Get-MicrosoftEdgeEx | Where-Object {($_.Platform -eq "Windows") -and ($_.Channel -eq "Stable") -and ($_.Architecture -eq "x64")} | Select-Object -last 1
+    $download = $edge.uri
+    $name = ($download -split '/')[-1]
+    $extractFile = (Join-Path -path $extractPath -ChildPath $name)
+    $installer = "$extractPath" + "$name"
+    $arguments = "/i $installer /l`*v C:\windows\logs\edgeinstall.log ALLUSERS=1 DONOTCREATEDESKTOPSHORTCUT=true /norestart /quiet"
 
-## download and install edge
-Start-Download -source $download -destination $extractFile
-Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
-Write-Verbose -Message ("MSEdge install completed.") -Verbose
+    ## download and install edge
+    Start-Download -source $download -destination $extractFile
+    Start-Install -FilePath 'C:\Windows\System32\msiexec.exe' -Arguments $arguments
+    Write-Verbose -Message ("MSEdge install completed.") -Verbose
+## End Region
 
-## update default user profile
-$settingsPath = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\$($version)_defaultuser.txt")
-Update-DefaultUserProfile -settingsPath $settingsPath
+## Begin Region (VcRedist)
+    ## download and install Vc++ Redist
+    Start-VcRedistInstall -extractedPath $extractedPath
+## End Region
 
-## citrix optmiser
-#$download = "https://phoenix.citrix.com/supportkc/filedownload?uri=/filedownload/CTX224676/CitrixOptimizer.zip"
-$name = "Optimiser.zip"
-$extractFile = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\$($name)")
-#$ctxscript = "$extractPath" + "CitrixOptimizer\CtxOptimizerEngine.ps1"
-$ctxscript = "$extractPath" + "Optimiser\CtxOptimizerEngine.ps1"
+## Begin Region (Default User Profile)
+    ## update default user profile
+    $settingsPath = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\$($version)_defaultuser.txt")
+    Update-DefaultUserProfile -settingsPath $settingsPath
+## Begin Region
 
-## download and install citrix optmiser
-Start-ExtractFile -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath "Optimiser")
-#Start-DownloadCtxOptimiser -download $download -extractPath $extractPath
+## Begin Region (Citrix Optimizer)
+    #$download = "https://phoenix.citrix.com/supportkc/filedownload?uri=/filedownload/CTX224676/CitrixOptimizer.zip"
+    $name = "Optimiser.zip"
+    $extractFile = (Join-Path -path $extractPath -ChildPath "WVD-master\Image\$($name)")
+    #$ctxscript = "$extractPath" + "CitrixOptimizer\CtxOptimizerEngine.ps1"
+    $ctxscript = "$extractPath" + "Optimiser\CtxOptimizerEngine.ps1"
 
-## start optimisation script
-Set-ExecutionPolicy Bypass -Scope Process -Force
-& $ctxscript -Mode Execute -OutputXml 'C:\windows\logs\CitrixOptimizerRollback.xml'
-Write-Verbose -Message ("Optimisations completed.") -Verbose
+    ## download and install citrix optmiser
+    Start-ExtractFile -filePath $extractFile -extractedPath (Join-Path -path $extractPath -ChildPath "Optimiser")
+    #Start-DownloadCtxOptimiser -download $download -extractPath $extractPath
+
+    ## start optimisation script
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    & $ctxscript -Mode Execute -OutputXml 'C:\windows\logs\CitrixOptimizerRollback.xml'
+    Write-Verbose -Message ("Optimisations completed.") -Verbose
+## End Region
 
 Stop-Transcript

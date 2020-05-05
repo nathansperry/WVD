@@ -396,7 +396,7 @@ $extractPath = "D:\"
 
 ## Begin Region (VcRedist)
     ## download and install Vc++ Redist
-    Start-VcRedistInstall -extractedPath $extractedPath
+    Start-VcRedistInstall -extractPath $extractedPath
 ## End Region
 
 ## Begin Region (Default User Profile)
